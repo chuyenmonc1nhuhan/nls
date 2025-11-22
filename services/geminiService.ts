@@ -46,9 +46,7 @@ export const getGeminiSuggestion = async (
             model: 'gemini-1.5-flash', 
             contents: [{ role: "user", parts: [{ text: userQuery }] }],
             config: {
-                temperature: 0.7,
-                // ĐÃ XÓA tools: googleSearch TẠI ĐÂY
-            }
+                temperature: 0.7,  
         });
         return (response.text || "");
     } catch (error) {
