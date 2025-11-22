@@ -1,7 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 import { NlsDatabase } from '../types';
 
-// Helper: Định dạng nguồn tham khảo từ Google Search
+// Helper: Định dạng nguồn tham khảo (Giữ lại để dự phòng)
 const formatSources = (groundingMetadata: any): string => {
     if (!groundingMetadata?.groundingChunks) return '';
     const uniqueSources = new Map();
@@ -16,10 +16,10 @@ const formatSources = (groundingMetadata: any): string => {
     const sourceList = Array.from(uniqueSources.entries()).map(([uri, title]) => {
         return `- [${title}](${uri})`;
     });
-    return '\n\n---\n**🌐 Nguồn tham khảo từ Google:**\n' + sourceList.join('\n');
+    return '\n\n---\n**🌐 Nguồn tham khảo:**\n' + sourceList.join('\n');
 };
 
-// Hàm 1: Gợi ý hoạt động
+// Hàm 1: Gợi ý hoạt động (ĐÃ BỎ Google Search để sửa lỗi 404)
 export const getGeminiSuggestion = async (
     lessonTitle: string,
     nlsCodes: string[],
@@ -27,12 +27,10 @@ export const getGeminiSuggestion = async (
     selectedClass: string,
     subject: string = 'TinHoc'
 ): Promise<string> => {
-    // Kiểm tra chìa khóa (hỗ trợ cả 2 tên biến)
     const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY;
-    if (!apiKey) throw new Error("API key chưa được cấu hình.");
+    if (!apiKey) throw new Error("Chưa có API Key.");
 
     const ai = new GoogleGenAI({ apiKey: apiKey });
-
     const lop = selectedClass === '3' ? 'Lớp 3 (8-9 tuổi)' : `Lớp ${selectedClass} (9-11 tuổi)`;
     const subjectName = subject === 'TinHoc' ? 'Tin học' : 'Công nghệ';
     const nlsDescriptions = nlsCodes.map(code => `- **${code}:** ${nlsDatabase[code] || ''}`).join('\n');
@@ -45,14 +43,14 @@ export const getGeminiSuggestion = async (
 
     try {
         const response = await ai.models.generateContent({
-            model: 'gemini-1.5-flash',
+            model: 'gemini-1.5-flash', 
             contents: [{ role: "user", parts: [{ text: userQuery }] }],
             config: {
                 temperature: 0.7,
-                tools: [{ googleSearch: {} }] // Vẫn giữ tìm kiếm Google
+                // ĐÃ XÓA tools: googleSearch TẠI ĐÂY
             }
         });
-        return (response.text || "") + formatSources(response.candidates?.[0]?.groundingMetadata);
+        return (response.text || "");
     } catch (error) {
         console.error("Lỗi Gemini:", error);
         throw new Error("Lỗi kết nối AI. Vui lòng thử lại sau.");
@@ -69,7 +67,7 @@ export const getGeminiLessonPlan = async (
     subject: string = 'TinHoc'
 ): Promise<string> => {
     const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY;
-    if (!apiKey) throw new Error("API key chưa được cấu hình.");
+    if (!apiKey) throw new Error("Chưa có API Key.");
 
     const ai = new GoogleGenAI({ apiKey: apiKey });
     const subjectName = subject === 'TinHoc' ? 'Tin học' : 'Công nghệ';
@@ -101,7 +99,7 @@ export const integrateNlsIntoLessonPlan = async (
     subject: string = 'TinHoc'
 ): Promise<string> => {
     const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY;
-    if (!apiKey) throw new Error("API key chưa được cấu hình.");
+    if (!apiKey) throw new Error("Chưa có API Key.");
 
     const ai = new GoogleGenAI({ apiKey: apiKey });
     const nlsDescriptions = nlsCodes.map(code => `- **${code}:** ${nlsDatabase[code] || ''}`).join('\n');
@@ -120,7 +118,7 @@ export const integrateNlsIntoLessonPlan = async (
     }
 };
 
-// Hàm 4: Tạo công cụ đánh giá (Rubric / Quiz)
+// Hàm 4: Tạo công cụ đánh giá
 export const getGeminiAssessment = async (
     type: 'rubric' | 'quiz',
     lessonTitle: string,
@@ -137,29 +135,10 @@ export const getGeminiAssessment = async (
     const nlsDescriptions = nlsCodes.map(code => `- **${code}:** ${nlsDatabase[code] || ''}`).join('\n');
     
     let prompt = '';
-
     if (type === 'rubric') {
-        prompt = `Tạo phiếu đánh giá (Rubric) cho học sinh Tiểu học trong bài: "${lessonTitle}" lớp ${selectedClass}, môn ${subjectName}.
-        
-        Mục tiêu đánh giá tập trung vào các Năng lực số (NLS) sau:
-        ${nlsDescriptions}
-
-        Yêu cầu:
-        - Tạo bảng Rubric với 3 hoặc 4 mức độ (Ví dụ: Cần cố gắng, Đạt, Tốt).
-        - Tiêu chí đánh giá phải cụ thể, dễ quan sát, phù hợp lứa tuổi tiểu học.
-        - Trình bày dưới dạng Markdown Table.
-        - Ngôn ngữ thân thiện, khích lệ học sinh.`;
+        prompt = `Tạo phiếu đánh giá (Rubric) cho bài: "${lessonTitle}" lớp ${selectedClass}, môn ${subjectName}. NLS: ${nlsDescriptions}. Yêu cầu: Markdown Table, 3 mức độ.`;
     } else {
-        prompt = `Tạo bộ câu hỏi trắc nghiệm (5 câu) cho bài học: "${lessonTitle}" lớp ${selectedClass}, môn ${subjectName}.
-        
-        Mục tiêu kiểm tra kiến thức bài học và các kỹ năng NLS sau:
-        ${nlsDescriptions}
-
-        Yêu cầu:
-        - 5 câu hỏi trắc nghiệm (4 lựa chọn A, B, C, D).
-        - Cuối cùng cung cấp Đáp án đúng và Giải thích ngắn gọn.
-        - Câu hỏi phù hợp với trình độ học sinh tiểu học.
-        - Trình bày Markdown rõ ràng.`;
+        prompt = `Tạo 5 câu hỏi trắc nghiệm cho bài: "${lessonTitle}" lớp ${selectedClass}, môn ${subjectName}. NLS: ${nlsDescriptions}. Yêu cầu: Có đáp án, Markdown.`;
     }
 
     try {
@@ -170,6 +149,6 @@ export const getGeminiAssessment = async (
         return response.text || "Không có nội dung đánh giá.";
     } catch (error) {
         console.error("Lỗi Gemini Assessment:", error);
-        throw new Error("Lỗi khi tạo công cụ đánh giá. Vui lòng thử lại.");
+        throw new Error("Lỗi khi tạo công cụ đánh giá.");
     }
 };
