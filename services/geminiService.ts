@@ -1,25 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 import { NlsDatabase } from '../types';
 
-// Helper: Định dạng nguồn tham khảo (Giữ lại để dự phòng)
-const formatSources = (groundingMetadata: any): string => {
-    if (!groundingMetadata?.groundingChunks) return '';
-    const uniqueSources = new Map();
-    groundingMetadata.groundingChunks.forEach((chunk: any) => {
-        if (chunk.web?.uri && chunk.web?.title) {
-            if (!uniqueSources.has(chunk.web.uri)) {
-                uniqueSources.set(chunk.web.uri, chunk.web.title);
-            }
-        }
-    });
-    if (uniqueSources.size === 0) return '';
-    const sourceList = Array.from(uniqueSources.entries()).map(([uri, title]) => {
-        return `- [${title}](${uri})`;
-    });
-    return '\n\n---\n**🌐 Nguồn tham khảo:**\n' + sourceList.join('\n');
-};
-
-// Hàm 1: Gợi ý hoạt động (ĐÃ BỎ Google Search để sửa lỗi 404)
+// Hàm 1: Gợi ý hoạt động
 export const getGeminiSuggestion = async (
     lessonTitle: string,
     nlsCodes: string[],
@@ -35,7 +17,6 @@ export const getGeminiSuggestion = async (
     const subjectName = subject === 'TinHoc' ? 'Tin học' : 'Công nghệ';
     const nlsDescriptions = nlsCodes.map(code => `- **${code}:** ${nlsDatabase[code] || ''}`).join('\n');
 
-    const systemPrompt = `Bạn là giáo viên ${subjectName} tiểu học. Nhiệm vụ: Gợi ý hoạt động dạy học sáng tạo phát triển Năng lực số.`;
     const userQuery = `Gợi ý hoạt động cho bài: "${lessonTitle}" (${lop}, ${subjectName}).
     Phát triển NLS:
     ${nlsDescriptions}
@@ -43,10 +24,9 @@ export const getGeminiSuggestion = async (
 
     try {
         const response = await ai.models.generateContent({
-            model: 'gemini-1.5-flash', 
+            model: 'gemini-1.5-flash',
             contents: [{ role: "user", parts: [{ text: userQuery }] }],
-            config: {
-                temperature: 0.7,  
+            config: { temperature: 0.7 }
         });
         return (response.text || "");
     } catch (error) {
@@ -126,7 +106,7 @@ export const getGeminiAssessment = async (
     subject: string = 'TinHoc'
 ): Promise<string> => {
     const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY;
-    if (!apiKey) throw new Error("API key chưa được cấu hình.");
+    if (!apiKey) throw new Error("Chưa có API Key.");
 
     const ai = new GoogleGenAI({ apiKey: apiKey });
     const subjectName = subject === 'TinHoc' ? 'Tin học' : 'Công nghệ';
