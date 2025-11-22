@@ -1,30 +1,23 @@
 import { GoogleGenAI } from '@google/genai';
 import { NlsDatabase } from '../types';
 
-const GEMINI_MODEL = 'gemini-2.5-flash';
-
-// Tạo client Gemini, ưu tiên Vite env, fallback sang process.env nếu chạy Node
-function createGeminiClient() {
+// Lấy API key từ env (GitHub Actions: dùng secrets, local: file .env, v.v.)
+function getApiKey() {
   const apiKey =
-    // Vite / frontend
-    (typeof import.meta !== 'undefined'
-      ? import.meta.env.VITE_GEMINI_API_KEY
-      : undefined) ??
-    // Node (nếu bạn có chạy server-side)
-    (typeof process !== 'undefined'
-      ? process.env.API_KEY || process.env.GEMINI_API_KEY
-      : undefined);
+    process.env.GOOGLE_API_KEY ||
+    process.env.API_KEY ||
+    process.env.GEMINI_API_KEY;
 
   if (!apiKey) {
-    throw new Error(
-      'Chưa có API Key. Hãy thêm VITE_GEMINI_API_KEY vào file .env.local'
-    );
+    throw new Error('Chưa có API Key.');
   }
-
-  return new GoogleGenAI({ apiKey });
+  return apiKey;
 }
 
-// ===================== Hàm 1: Gợi ý hoạt động =====================
+// Dùng model mới (không còn lỗi 404 như gemini-1.5-flash)
+const GEMINI_MODEL = 'gemini-2.5-flash';
+
+// Hàm 1: Gợi ý hoạt động
 export const getGeminiSuggestion = async (
   lessonTitle: string,
   nlsCodes: string[],
@@ -32,7 +25,7 @@ export const getGeminiSuggestion = async (
   selectedClass: string,
   subject: string = 'TinHoc'
 ): Promise<string> => {
-  const ai = createGeminiClient();
+  const ai = new GoogleGenAI({ apiKey: getApiKey() });
 
   const lop =
     selectedClass === '3'
@@ -51,18 +44,17 @@ Yêu cầu: Trả lời tiếng Việt, Markdown, ngắn gọn.`;
   try {
     const response = await ai.models.generateContent({
       model: GEMINI_MODEL,
-      contents: userQuery,
+      contents: [{ role: 'user', parts: [{ text: userQuery }] }],
       config: { temperature: 0.7 },
     });
-
     return response.text || '';
   } catch (error) {
-    console.error('Lỗi Gemini (gợi ý hoạt động):', error);
+    console.error('Lỗi Gemini:', error);
     throw new Error('Lỗi kết nối AI. Vui lòng thử lại sau.');
   }
 };
 
-// ===================== Hàm 2: Soạn giáo án =====================
+// Hàm 2: Soạn giáo án
 export const getGeminiLessonPlan = async (
   lessonTitle: string,
   nlsCodes: string[],
@@ -71,7 +63,7 @@ export const getGeminiLessonPlan = async (
   initialSuggestion: string,
   subject: string = 'TinHoc'
 ): Promise<string> => {
-  const ai = createGeminiClient();
+  const ai = new GoogleGenAI({ apiKey: getApiKey() });
 
   const subjectName = subject === 'TinHoc' ? 'Tin học' : 'Công nghệ';
   const nlsDescriptions = nlsCodes
@@ -86,9 +78,8 @@ Dựa trên ý tưởng: ${initialSuggestion}`;
   try {
     const response = await ai.models.generateContent({
       model: GEMINI_MODEL,
-      contents: userQuery,
+      contents: [{ role: 'user', parts: [{ text: userQuery }] }],
     });
-
     return response.text || 'Không có nội dung.';
   } catch (error) {
     console.error('Lỗi Gemini (soạn giáo án):', error);
@@ -96,7 +87,7 @@ Dựa trên ý tưởng: ${initialSuggestion}`;
   }
 };
 
-// ===================== Hàm 3: Tích hợp NLS =====================
+// Hàm 3: Tích hợp NLS
 export const integrateNlsIntoLessonPlan = async (
   lessonTitle: string,
   nlsCodes: string[],
@@ -105,7 +96,7 @@ export const integrateNlsIntoLessonPlan = async (
   userLessonPlanContent: string,
   subject: string = 'TinHoc'
 ): Promise<string> => {
-  const ai = createGeminiClient();
+  const ai = new GoogleGenAI({ apiKey: getApiKey() });
 
   const nlsDescriptions = nlsCodes
     .map((code) => `- **${code}:** ${nlsDatabase[code] || ''}`)
@@ -119,7 +110,7 @@ ${userLessonPlanContent}
   try {
     const response = await ai.models.generateContent({
       model: GEMINI_MODEL,
-      contents: userQuery,
+      contents: [{ role: 'user', parts: [{ text: userQuery }] }],
     });
 
     return (response.text || '')
@@ -131,7 +122,7 @@ ${userLessonPlanContent}
   }
 };
 
-// ===================== Hàm 4: Tạo công cụ đánh giá =====================
+// Hàm 4: Tạo công cụ đánh giá
 export const getGeminiAssessment = async (
   type: 'rubric' | 'quiz',
   lessonTitle: string,
@@ -140,4 +131,34 @@ export const getGeminiAssessment = async (
   selectedClass: string,
   subject: string = 'TinHoc'
 ): Promise<string> => {
-  const ai =
+  const ai = new GoogleGenAI({ apiKey: getApiKey() });
+
+  const subjectName = subject === 'TinHoc' ? 'Tin học' : 'Công nghệ';
+  const nlsDescriptions = nlsCodes
+    .map((code) => `- **${code}:** ${nlsDatabase[code] || ''}`)
+    .join('\n');
+
+  let prompt = '';
+  if (type === 'rubric') {
+    prompt = `Tạo phiếu đánh giá (Rubric) cho bài: "${lessonTitle}" lớp ${selectedClass}, môn ${subjectName}.
+NLS:
+${nlsDescriptions}
+Yêu cầu: Markdown Table, 3 mức độ.`;
+  } else {
+    prompt = `Tạo 5 câu hỏi trắc nghiệm cho bài: "${lessonTitle}" lớp ${selectedClass}, môn ${subjectName}.
+NLS:
+${nlsDescriptions}
+Yêu cầu: Có đáp án, Markdown.`;
+  }
+
+  try {
+    const response = await ai.models.generateContent({
+      model: GEMINI_MODEL,
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    });
+    return response.text || 'Không có nội dung đánh giá.';
+  } catch (error) {
+    console.error('Lỗi Gemini Assessment:', error);
+    throw new Error('Lỗi khi tạo công cụ đánh giá.');
+  }
+};
